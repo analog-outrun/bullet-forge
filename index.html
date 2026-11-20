@@ -568,6 +568,7 @@ details.bfcard>.ruleg,details.bfcard>.dfwrap{border:0;margin:0;border-radius:0 0
    <span class="savechip" id="saveChip"></span>
   </div>
  </header>
+ <p class="muted" style="margin:6px 16px 10px">Scores and format checks are advisory. Confirm official requirements with the applicable publication and local guidance.</p>
  <nav class="modebar" id="modebar">
   <div class="mtab on" data-m="1206" onclick="setMode('1206')">1206 Award <small>nomination</small></div>
   <div class="mtab" data-m="epb" onclick="setMode('epb')">EPB / OPB <small>evaluation</small></div>
@@ -3949,7 +3950,12 @@ function scopeReached(text){ text=nsp(text);
 function hasRecognition(text){ text=nsp(text);
   return VOCAB.recognitionCues.some(function(c){return new RegExp("\\b"+c.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i").test(text);});
 }
-function numCount(text){ text=nsp(text); var re=/\$?\d[\d.,]*\s?(?:K|M|B|%|hrs?|hours?|days?|\+)?(?![A-Za-z])/gi,m,n=0; while((m=re.exec(text))){ var idx=m.index; if(idx===0||!/[A-Za-z0-9]/.test(text.charAt(idx-1))){ n++; if(re.lastIndex===idx)re.lastIndex++; } else { re.lastIndex=idx+1; } } return n; }
+function numCount(text){
+  // Ignore common dates and keep an explicit ranking with its denominator together.
+  var clean=nsp(text).replace(/\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g," ");
+  var evidence=/(?<!\w)(?<!\d[.,])(?:#\s*\d+(?:\s*(?:of|\/)\s*\d+)?|(?:ranked\s+|top\s+)\d+\s+of\s+\d+|(?:\$\s*)?\d+(?:,\d{3})*(?:\.\d+)?(?:[KMB]\b|\s*%)?)(?!\w|[.,]\d)/gi;
+  return (clean.match(evidence)||[]).length;
+}
 function lint(text,ctx){ text=nsp(text);
   var f=[]; var cust=customSet();
   if(/[()]/.test(text)) f.push({t:"err",m:"Parentheses not allowed",x:"Remove and rephrase."});
@@ -4950,6 +4956,37 @@ function draftDomains(e){
   if(/award|coin|quarter|recogni|honor|of the year|distinguished graduate|lauded|letter of appreciation/.test(l)) d.push("Recognition");
   return d.length?d.slice(0,4):["Readiness/Ops"];
 }
+// Conservative writing cues, with common aliases counted as the same reference.
+var BL_PLACEMENT=[
+  /\b(?:DAF|Department of the Air Force)\b/i,
+  /\b(?:DoD|Department of Defense)\b/i,
+  /\b(?:PACAF|Pacific Air Forces)\b/i,
+  /\b(?:USAFE|United States Air Forces in Europe)\b/i,
+  /\b(?:DHA|Defense Health Agency)\b/i,
+  /\b(?:AETC|Air Education and Training Command)\b/i,
+  /\b(?:ACC|Air Combat Command)\b/i,
+  /\b(?:AMC|Air Mobility Command)\b/i,
+  /\b(?:AFMC|Air Force Materiel Command)\b/i,
+  /\b(?:INDOPACOM|Indo-Pacific Command)\b/i,
+  /\b(?:USFJ|United States Forces Japan)\b/i,
+  /\b(?:TCCC|Tactical Combat Casualty Care)\b/i,
+  /\b(?:CCAF|Community College of the Air Force)\b/i,
+  /\b(?:USAF|United States Air Force|U\.S\. Air Force|Air Force)\b/i,
+  /\b(?:PME|Professional Military Education)\b/i,
+  /\b(?:OTQ|NCOQ|SNCOQ|AOQ|CGOQ|FGOQ)\b/i,
+  /\b(?:OTY|NCOY|SNCOY|AOY|CGOY|FGOY)\b/i
+];
+function institutionalCueCount(t){
+  // Match the specific full name first so embedded names don't also score.
+  var count=0;
+  BL_PLACEMENT.forEach(function(pattern){
+    if(pattern.test(t)){
+      count++;
+      t=t.replace(new RegExp(pattern.source,"gi")," ");
+    }
+  });
+  return count;
+}
 function mergeDrafted(){
   if(window.DRAFT_COUNTS) return;
   var D=window.DRAFTED||[]; if(!D.length) return;
@@ -5036,9 +5073,8 @@ function grade1206(text){ text=nsp(text);
   var lines=wrap(text); if(lines.length>getMaxLines()) verb=Math.max(2,verb-3);
   if(findWeak(text).length && bt>=3) verb=Math.min(verb,3);
   /* v10.0 validated parts */
-  var GENERIC={IAW:1,POC:1,POCS:1,SME:1,SMES:1,ID:1,OK:1,AM:1,PM:1,ETC:1,NA:1,TBD:1,FY:1,CY:1,ASAP:1,NLT:1,HRS:1,MOS:1,WKS:1};
-  var ac=(text.match(/\b[A-Z]{2,}[A-Z0-9\/&]*\b/g)||[]).filter(function(a){return !GENERIC[a.replace(/[^A-Z]/g,"")];}).length;
-  var placement= ac>=3?10:(ac==2?8:(ac==1?6:2));
+  var cueCount=institutionalCueCount(text);
+  var placement=cueCount>=3?10:(cueCount===2?8:(cueCount===1?6:2));
   var innovation= /\b(innovat\w*|pilot(?:ed|ing)|creat\w*|design\w*|redesign\w*|invent\w*|devis\w*|engineer\w*|streamlin\w*|revamp\w*|overhaul\w*|automat\w*|digitiz\w*|moderniz\w*|first[- ]ever|first|inaugural|pioneer\w*|established|stood up|built)\b/i.test(text)?10:3;
   var earned= /\b(OTQ|OTY|NCOQ|NCOY|SNCOQ|SNCOY|AOQ|AOY|CGOQ|CGOY|FGOQ|FGOY|of the (?:quarter|qtr|year|yr|month)|award(?:ed)?|won|winner|selected|hand-?(?:picked|selected)|nominated|LOA|letter of appreciation|best practice|benchmark(?:ed)?|levitow|distinguished graduate|honor graduate|stratified)\b/i.test(text)?10:(/\bcoin(?:ed|s)?\b|\blaud(?:ed)?\b|\bpraised\b|\bcommended\b|\bkudos\b/i.test(text)?5:3);
   var pen=0, penWhy=[];
@@ -5079,10 +5115,10 @@ renderScore=function(){ _rs();
   var bavg=brs.length?brs.reduce(function(a,c){return a+c;},0)/brs.length:0, bround=Math.round(bavg*2)/2;
   var rr=recReach(bs);
   $("score").insertAdjacentHTML("afterbegin",
-    '<div class="kpi" title="Writing grade, anchored to the winning corpus: ELITE 77+ / STRONG 62+ / COMPETITIVE 48+ / MODERATE 33+ / WEAK below 33 (v10.0 bands, same corpus shares as before) (under ~95% of winners)"><b style="color:'+bd[1]+'">'+g.score+'</b><span>grade /100</span></div>'+
-    '<div class="kpi" title="Board read: each statement scored 1-10 the way a reviewer does, averaged, rounded to .5 (raw '+bavg.toFixed(2)+'). 7.5 = did the job with data; 8 = changed something; 8.5+ = reach, recognition, or enterprise-first. See Rules tab."><b style="color:'+(bround>=8.5?'var(--good)':(bround>=8?'var(--acc)':'var(--warn)'))+'">'+(brs.length?bround.toFixed(1):'\u2013')+'</b><span>board read /10</span></div>'+
+    '<div class="kpi" title="Heuristic writing grade. See Rules for its weights and current grade bands."><b style="color:'+bd[1]+'">'+g.score+'</b><span>grade /100</span></div>'+
+    '<div class="kpi" title="Board read: heuristic estimate for each statement on a 1–10 scale, averaged, rounded to .5 (raw '+bavg.toFixed(2)+'). 7.5 = did the job with data; 8 = changed something; 8.5+ = reach, recognition, or enterprise-first. See Rules tab."><b style="color:'+(bround>=8.5?'var(--good)':(bround>=8?'var(--acc)':'var(--warn)'))+'">'+(brs.length?bround.toFixed(1):'\u2013')+'</b><span>board read /10</span></div>'+
     '<div class="kpi" title="Recognition reach: highest echelon that conferred recognition anywhere in the package (Sq / Group / Wing / MAJCOM / AF). Records that stop at Group are the most common gap reviewers flag."><b style="color:'+(rr.tier>=3?'var(--good)':(rr.tier>=2?'var(--acc)':'var(--warn)'))+'">'+escHtml(rr.label)+'</b><span>rec reach</span></div>'+
-    '<div class="kpi" title="Statements scoring ELITE (80+) and STRONG (65+)"><b style="color:'+(elite?'var(--good)':'var(--ink)')+'">'+elite+'\u00b7'+strong+'</b><span>elite\u00b7strong</span></div>'+
+    '<div class="kpi" title="Statements in the current ELITE and STRONG writing bands"><b style="color:'+(elite?'var(--good)':'var(--ink)')+'">'+elite+'\u00b7'+strong+'</b><span>elite\u00b7strong</span></div>'+
     '<div class="kpi" title="Package contains an earned-award or first-of-kind discriminator - boards look for at least one"><b style="color:'+(diff?'var(--good)':'var(--warn)')+'">'+(diff?'\u2713':'\u2717')+'</b><span>differentiator</span></div>');
 };
 /* wrap renderAll to stamp per-bullet grade + refresh grade tab */
@@ -5372,9 +5408,9 @@ function setMode(m){
 /* ================= EPB / OPB MODE ================= */
 function narrativeLint(t){
   var f=[];
-  if(/\u2014|--/.test(t))f.push("Em-dash / double-dash not authorized in EPBs. Use a comma or new sentence.");
+  if(/\u2014|--/.test(t))f.push("Consider a comma or new sentence in place of the dash.");
   if(/;/.test(t))f.push("Semicolons break EPB narrative flow. Use commas or split the sentence.");
-  if(/[()]/.test(t))f.push("Parentheses not allowed.");
+  if(/[()]/.test(t))f.push("Consider spelling out or rephrasing the parenthetical text.");
   if(/\bw\//.test(t))f.push("Spell out 'with'.");
   if(/\b(helped|assisted|participated|supported)\b/i.test(t))f.push("Weak verb detected. Lead with a strong action verb.");
   return f;
@@ -5788,11 +5824,6 @@ function epbModernizeAll(){
 function epbVerbTier(text){ text=nsp(text);
   var v=openingVerb(text||""); return v?verbTierOf(v):0;
 }
-function epbMetricCount(text){
-  var num=(text.match(/\$\s?[\d,.]+\s?[KMB]?|\b\d[\d,]*\.?\d*%?/g)||[]).length;
-  var rank=(text.match(/#\s?\d|\b1st\b|top\s?\d|\b\d+\s+of\s+\d+/gi)||[]).length;
-  return {num:num,rank:rank};
-}
 var EPB_PROF=[{n:1,lab:"Needs Improvement",c:"#c0392b"},{n:2,lab:"Developing",c:"#c07000"},{n:3,lab:"Proficient",c:"#9a7d00"},{n:4,lab:"Highly Proficient",c:"#1a7f9a"},{n:5,lab:"Exceptionally Proficient",c:"#2e7d55"}];
 function epbProficiency(t){
   var s=(t||"").toLowerCase(),sig=[],pts=0;
@@ -5934,11 +5965,11 @@ function epbProofPanel(){
     h+='<div class="chips">'+shKeys.map(function(k){var parts=k.split('\u2192');return '<span class="fchip" title="'+shAll[k]+' found">'+escHtml(parts[0])+' \u2192 '+escHtml(parts[1])+' ('+shAll[k]+')</span>';}).join('')+'</div>';
   }
   // competitiveness readout (verb tier + metric density)
-  var totMetrics=0; secs.forEach(function(p){var mc=epbMetricCount(p.text);totMetrics+=mc.num+mc.rank;});
+  var totMetrics=secs.reduce(function(total,p){return total+numCount(p.text);},0);
   var weakOpen=secs.filter(function(p){return epbVerbTier(p.text)===0&&p.text.trim();});
   var t1=((window.ENGINE&&ENGINE.verbTiers&&ENGINE.verbTiers['1'])||[]).slice(0,5).join(', ');
   h+='<div style="margin:12px 0 4px"><span class="muted" style="font-size:10px;letter-spacing:.5px">COMPETITIVENESS</span></div><div class="flags">';
-  h+='<div class="flag" style="border-color:var(--acc);color:var(--acc)">'+totMetrics+' quantified data point'+(totMetrics===1?'':'s')+' across the eval (numbers, $, %, rankings). Strong statements lead with quantified impact.</div>';
+  h+='<div class="flag" style="border-color:var(--acc);color:var(--acc)">'+totMetrics+' numeric cue'+(totMetrics===1?'':'s')+' across the evaluation. Check that each number supports the stated result.</div>';
   secs.forEach(function(p){var tier=epbVerbTier(p.text);if(p.text.trim()){var lab=tier?('Tier '+tier+' opener'):('no strong opening verb');var col=tier===1?'#2e7d55':(tier?'#8a6d00':'#c0392b');h+='<div class="flag" style="border-color:'+col+';color:'+col+'">'+escHtml(p.label)+': '+lab+'</div>';}});
   if(weakOpen.length)h+='<div class="flag warn">Lead weaker sections with a Tier 1 verb: '+escHtml(t1)+'.</div>';
   h+='</div>';
@@ -5999,11 +6030,11 @@ function decoProofBlock(){
     return row;});
   var h='<div style="margin-top:12px"><div class="sechead" style="margin-bottom:6px"><h4 style="font-size:13px">Proofing, Line Layout &amp; Consistency</h4><span class="muted" style="font-size:10px">Courier 11pt \u00b7 70 ch/line \u00b7 20 lines to GUH</span></div>';
   h+='<div class="flags" style="margin-bottom:8px">';
-  if(over)h+='<div class="flag err"><b>\u26a0 Overflows the certificate:</b> the citation wraps to '+nl+' lines \u2014 '+(nl-DECO_MAX_LINES)+' line(s) will print on top of GIVEN UNDER MY HAND. Trim until it fits 20 lines.</div>';
+  if(over)h+='<div class="flag err"><b>\u26a0 Exceeds the preview layout:</b> the citation wraps to '+nl+' lines \u2014 '+(nl-DECO_MAX_LINES)+' line(s) extend beyond the signature marker in this preview. Review the official form before submission.</div>';
   else h+='<div class="flag" style="border-color:#2e7d55;color:#9be8c0">\u2713 Fits above GIVEN UNDER MY HAND \u2014 '+nl+'/20 lines used.</div>';
   items.forEach(function(x){h+='<div class="flag warn">'+x+'</div>';});
   h+='</div>';
-  h+='<div class="muted" style="font-size:10px;letter-spacing:.5px;margin:6px 0 3px">CERTIFICATE LINE LAYOUT (exactly how MyDec wraps it)</div>';
+  h+='<div class="muted" style="font-size:10px;letter-spacing:.5px;margin:6px 0 3px">ESTIMATED CERTIFICATE LINE LAYOUT</div>';
   h+='<div style="font-family:\'Courier New\',monospace;font-size:11px;line-height:1.45;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);white-space:pre-wrap;overflow-x:auto">'+pv.join("")+'</div>';
   return h+'</div>';
 }
@@ -6023,8 +6054,8 @@ function renderDeco(){
    '<div class="sechead" style="margin-bottom:6px"><h4 style="font-size:13px">Citation body</h4><span class="charcount '+cc+'">'+bodyLen+' / '+win[0]+'–'+win[1]+'</span></div>'+
    '<div class="transrow">'+DECO.transitions.map(function(t){return '<span class="swap" onclick="insTrans('+JSON.stringify(t).replace(/"/g,'&quot;')+')">'+t+'</span>';}).join("")+'</div>'+
    '<textarea class="epbta" id="dbody" style="min-height:150px" oninput="onDeco(\'body\')" placeholder="During this period, [achievement with metrics and scope]. Additionally, ... Finally, [strongest real-impact line].">'+escHtml(d.body||"")+'</textarea>';
-  var fl=narrativeLint(d.body||""); fl=fl.filter(function(x){return x.indexOf("Em-dash")<0&&x.indexOf("Semicolon")<0;}); // decorations historically tolerate, but flag weak verbs
-  if(narrativeLint(d.body||"").length) ed+='<div class="flags" style="margin-top:9px">'+narrativeLint(d.body||"").map(function(x){return '<div class="flag warn">'+x+'</div>';}).join("")+'</div>';
+  var flags=narrativeLint(d.body||"");
+  if(flags.length) ed+='<div class="flags" style="margin-top:9px">'+flags.map(function(x){return '<div class="flag warn">'+x+'</div>';}).join("")+'</div>';
   ed+=decoProofBlock();
   ed+='<div class="muted" style="margin:10px 0 4px">Auto closing</div><div class="scaffold">'+escHtml(decoClosing())+'</div>'+
    '<div class="brow"><button class="btn gold sm" onclick="copyDeco()">Copy full citation</button><span class="muted" style="margin-left:8px">'+full.length+' chars total</span></div>'+
@@ -6715,22 +6746,20 @@ function boardEvidenceTable(){
   return h+'</div><div class="muted" style="font-size:11px;margin-top:6px">Grade bands re-anchored to the same corpus shares: ELITE 77+, STRONG 62+, COMPETITIVE 48+, MODERATE 33+.</div>';
 }
 /* ---- per-statement evidence profile ---- */
-var BL_GENERIC={DV:1,DVS:1,VIP:1,VIPS:1,GO:1,GOS:1,CC:1,IAW:1,POC:1,POCS:1,SME:1,SMES:1,ID:1,OK:1,AM:1,PM:1,ETC:1,NA:1,TBD:1,FY:1,CY:1,ASAP:1,NLT:1,HRS:1,MOS:1,WKS:1};
 var BL_EARN=/\b(OTQ|OTY|NCOQ|NCOY|SNCOQ|SNCOY|AOQ|AOY|CGOQ|CGOY|FGOQ|FGOY|of the (?:quarter|qtr|year|yr|month)|award(?:ed)?|won|winner|selected|hand-?(?:picked|selected)|nominated|LOA|letter of appreciation|best practice|benchmark(?:ed)?|levitow|distinguished graduate|honor graduate|stratified)\b/i;
 var BL_COIN=/\bcoin(?:ed|s)?\b/i, BL_PRAISE=/\b(laud(?:ed)?|praised|commended|kudos|recognized by)\b/i;
 var BL_VISIT=/\b(visit(?:ed|ing|s)?|tour(?:ed|s)?|DVs?|distinguished visitor|VIP|immersion|walk-?through)\b/i;
 var BL_FUT=/\b(?:will|plans? to|set to|slated to|pending|projected to|expected to|to be (?:implemented|fielded|launched))\b/i;
 var BL_TEAM=/^\s*(?:the |our |his |her )?(?:team|flight|section|unit|clinic|squadron|office)\b[^.]{0,40}\b(?:led|completed|executed|achieved|delivered)\b/i;
 var BL_STRETCH=/\b(acting|interim|backfill\w*|filled (?:a |the )?\w*\s*(?:vacancy|gap)|manning (?:gap|shortfall)|above (?:his|her|my) (?:grade|paygrade)|in lieu of)\b/i;
-function blOrgs(t){ return (t.match(/\b[A-Z]{2,}[A-Z0-9\/&]*\b/g)||[]).filter(function(a){return !BL_GENERIC[a.replace(/[^A-Z]/g,"")];}); }
 function blProfile(t){ t=nsp(t||"");
   var nums=numCount(t), conn=_hasConn(t);
   var after=conn?t.split(/\b(?:earning|enabling|resulting|securing|driving|yielding|saving|spurring|propel\w*|catapult\w*|leading to|culminating)\b/i).slice(1).join(" "):"";
   var sc=scopeReached(t), wide=sc.slice(Math.max(0,sc.length-4)).some(function(s){return s.on;});
-  var orgs=blOrgs(t), earn=BL_EARN.test(t), coin=BL_COIN.test(t), praise=BL_PRAISE.test(t);
-  var p={num:nums>=2, out:conn&&/\d/.test(after), reach:wide||orgs.length>=2, rank:_hasRank(t), org:orgs.length>=1, earned:earn,
+  var orgN=institutionalCueCount(t), earn=BL_EARN.test(t), coin=BL_COIN.test(t), praise=BL_PRAISE.test(t);
+  var p={num:nums>=2, out:conn&&/\d/.test(after), reach:wide||orgN>=2, rank:_hasRank(t), org:orgN>=1, earned:earn,
          coinOnly:(coin||praise)&&!earn, visitCoin:(coin||praise)&&!earn&&BL_VISIT.test(t), dollar:/\$\s?\d/.test(t), conn:conn,
-         fut:BL_FUT.test(t), team:BL_TEAM.test(t), stretch:BL_STRETCH.test(t)&&!conn&&nums<2, orgN:orgs.length};
+         fut:BL_FUT.test(t), team:BL_TEAM.test(t), stretch:BL_STRETCH.test(t)&&!conn&&nums<2, orgN:orgN};
   p.density=[p.num,p.out,p.reach,p.rank,p.org,p.earned].filter(Boolean).length;
   return p;
 }
